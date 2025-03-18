@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "name": "hello_world",
+  "func_name": "handler.lambda_handler",
+  "resource_type": "lambda",
+  "iam_role_name": "hello_world-role",
+  "runtime": "python3.10",
+  "memory": 128,
+  "timeout": 100,
+  "lambda_path": "lambdas\\hello_world",
+  "dependencies": [],
+  "event_sources": [],
+  "env_variables": {},
+  "publish_version": true,
+  "alias": "${lambdas_alias_name}",
+  "url_config": {
+    "auth_type": "NONE",
+    "invoke_mode": "BUFFERED",
+    "cors": {
+      "allow_credentials": false,
+      "allow_headers": ["Content-Type", "X-Amz-Date", "Authorization", "X-Api-Key", "X-Amz-Security-Token"],
+      "allow_methods": ["GET"],
+      "allow_origins": ["*"],
+      "expose_headers": ["Date", "X-Amz-Date"],
+      "max_age": 3600
+    }
+  },
+  "ephemeral_storage": 512,
+  "logs_expiration": "${logs_expiration}",
+  "tags": {}
+}
