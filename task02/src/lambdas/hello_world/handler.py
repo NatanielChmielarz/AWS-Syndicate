@@ -30,13 +30,13 @@ class HelloWorldHandler(AbstractLambda):
             _LOG.info("Request matched the /hello endpoint")
             return {
                 "statusCode": 200,
-                "body": json.dumps({"message": "Hello from Lambda"})
+                "body": json.dumps({"statusCode": 200,"message": "Hello from Lambda"})
             }
         else:
             _LOG.error("Unrecognized endpoint or method")
             return {
                 "statusCode": 400,
-                "body": json.dumps({
+                "body": json.dumps({"statusCode": 400,
                     "message": f"Bad request: Method {method} and path {path} not supported."
                 })
             }
