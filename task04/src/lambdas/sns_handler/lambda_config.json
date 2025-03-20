@@ -12,10 +12,10 @@
   "event_sources": [{
     "resource_type": "sns_topic_trigger",
     "target_topic": "lambda_topic",
-    "region": "eu-central-1"
+    "region": "${region}"
   }],
   "env_variables": {},
-  "publish_version": true,
+  "publish_version": false,
   "alias": "${lambdas_alias_name}",
   "url_config": {},
   "ephemeral_storage": 512,
