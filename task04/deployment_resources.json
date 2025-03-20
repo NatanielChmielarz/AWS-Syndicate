@@ -17,8 +17,7 @@
             "kms:Decrypt",
             "sqs:ReceiveMessage",
             "sqs:DeleteMessage",
-            "sqs:GetQueueAttributes",
-            "sns:ListTopics"
+            "sqs:GetQueueAttributes"
           ],
           "Effect": "Allow",
           "Resource": "*"
@@ -44,7 +43,7 @@
   },
   "lambda_topic": {
     "resource_type": "sns_topic",
-    "region": "eu-central-1",
+    "region": "${region}",
     "event_sources": [],
     "tags": {}
   }

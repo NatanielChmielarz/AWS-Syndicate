@@ -15,7 +15,7 @@
     "region": "${region}"
   }],
   "env_variables": {},
-  "publish_version": false,
+  "publish_version": true,
   "alias": "${lambdas_alias_name}",
   "url_config": {},
   "ephemeral_storage": 512,
