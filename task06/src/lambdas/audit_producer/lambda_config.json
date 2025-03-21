@@ -25,6 +25,7 @@
     "CONFIGURATION_TABLE": "${configuration_table}",
     "AUDIT_TABLE": "${audit_table}"
   },
+  "alias": "${lambdas_alias_name}",
   "publish_version": false,
   "url_config": {},
   "ephemeral_storage": 512,

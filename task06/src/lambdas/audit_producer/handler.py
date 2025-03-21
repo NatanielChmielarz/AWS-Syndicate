@@ -1,69 +1,76 @@
-import datetime
-import os
-import uuid
-
-import boto3
-
 from commons.log_helper import get_logger
 from commons.abstract_lambda import AbstractLambda
 
-_LOG = get_logger('AuditProducer-handler')
+_LOG = get_logger("AuditProducer-handler")
+
+import os
+import uuid
+import boto3
+from datetime import datetime
 
 
 class AuditProducer(AbstractLambda):
 
     def validate_request(self, event) -> dict:
         pass
-        
+
     def handle_request(self, event, context):
-        """Explain incoming event here"""
-        _LOG.info(event)
+        """
+        Explain incoming event here
+        """
+        _LOG.info("Event:\n%s", str(event))
 
-        dynamodb = boto3.resource('dynamodb')
-        conf_table_name = os.environ['CONFIGURATION_TABLE']
-        audit_table_name = os.environ['AUDIT_TABLE']
-        _LOG.info(f'CONFIGURATION_TABLE: {conf_table_name}')
-        _LOG.info(f'AUDIT_TABLE: {audit_table_name}')
-        table = dynamodb.Table(audit_table_name)
+        for entry in event["Records"]:
+            if entry["eventName"] == "INSERT":
+                self.process_insert(entry["dynamodb"])
+            elif entry["eventName"] == "MODIFY":
+                self.process_update(entry["dynamodb"])
 
-        now = datetime.datetime.now()
-        iso_format = now.isoformat()
+    def process_insert(self, dynamodb_entry):
+        _LOG.info("Executing process_insert method")
+        new_entry_snapshot = dynamodb_entry["NewImage"]
 
-        if event['Records'][0]['eventName'] == 'INSERT':
-            item = {
-                "id": str(uuid.uuid4()),
-                "itemKey": event['Records'][0]['dynamodb']['Keys']['key']['S'],
-                "modificationTime": iso_format,
-                "newValue": {
-                    "key": event['Records'][0]['dynamodb']['NewImage']['key']['S'],
-                    "value": int(event['Records'][0]['dynamodb']['NewImage']['value']['N'])
-                }
-            }
-        elif event['Records'][0]['eventName'] == 'MODIFY':
-            item = {
-                "id": str(uuid.uuid4()),
-                "itemKey": event['Records'][0]['dynamodb']['Keys']['key']['S'],
-                "modificationTime": iso_format,
-                "updatedAttribute": "value",
-                "oldValue": int(event['Records'][0]['dynamodb']['OldImage']['value']['N']),
-                "newValue": int(event['Records'][0]['dynamodb']['NewImage']['value']['N'])
-            }
+        dynamodb_resource = boto3.resource("dynamodb")
+        audit_db_table = dynamodb_resource.Table(
+            os.environ.get("AUDIT_TABLE_NAME", "Audit")
+        )
 
-        try:
-            response = table.put_item(Item=item)
-        except Exception as error:
-            _LOG.info(f'Error: {error}')
-            _LOG.info('Dirty hack!')
-            table = dynamodb.Table('cmtr-b5eedb66-Audit-test')
-            response = table.put_item(Item=item)
-
-        _LOG.info(f'DynamoDb response: {response}')
-        _LOG.info(f'Added item to Audit table: {item}')
-
-        return {
-            'message': 'Successfully added Audit record',
-            'response': response
+        audit_record = {
+            "auditId": str(uuid.uuid4()),
+            "recordKey": new_entry_snapshot["key"]["S"],
+            "timestamp": datetime.utcnow().isoformat(),
+            "newData": {
+                "key": new_entry_snapshot["key"]["S"],
+                "value": int(new_entry_snapshot["value"]["N"]),
+            },
         }
+
+        response = audit_db_table.put_item(Item=audit_record)
+        _LOG.info(response)
+
+    def process_update(self, dynamodb_entry):
+        _LOG.info("Executing process_update method")
+
+        previous_entry_snapshot = dynamodb_entry["OldImage"]
+        new_entry_snapshot = dynamodb_entry["NewImage"]
+
+        dynamodb_resource = boto3.resource("dynamodb")
+        audit_db_table = dynamodb_resource.Table(
+            os.environ.get("AUDIT_TABLE_NAME", "Audit")
+        )
+
+        if previous_entry_snapshot["value"]["N"] != new_entry_snapshot["value"]["N"]:
+            audit_record = {
+                "auditId": str(uuid.uuid4()),
+                "recordKey": new_entry_snapshot["key"]["S"],
+                "timestamp": datetime.now().isoformat(),
+                "modifiedField": "value",
+                "previousValue": int(previous_entry_snapshot["value"]["N"]),
+                "updatedValue": int(new_entry_snapshot["value"]["N"]),
+            }
+
+            response = audit_db_table.put_item(Item=audit_record)
+            _LOG.info(response)
 
 
 HANDLER = AuditProducer()
