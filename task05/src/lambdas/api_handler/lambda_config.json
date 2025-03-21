@@ -10,7 +10,10 @@
   "lambda_path": "lambdas/api_handler",
   "dependencies": [],
   "event_sources": [],
-  "env_variables": {},
+  "env_variables": {
+    "region": "${region}",
+    "target_table": "${target_table}"
+  },
   "publish_version": true,
   "alias": "${lambdas_alias_name}",
   "url_config": {},
