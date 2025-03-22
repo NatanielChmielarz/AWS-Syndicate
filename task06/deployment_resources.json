@@ -12,13 +12,15 @@
             "dynamodb:PutItem",
             "dynamodb:Batch*",
             "dynamodb:DeleteItem",
-            "ssm:PutParameter",
-            "ssm:GetParameter",
-            "kms:Decrypt",
+            "dynamodb:Scan",
+            "dynamodb:UpdateItem",
+            "dynamodb:DescribeStream",
             "dynamodb:GetRecords",
             "dynamodb:GetShardIterator",
-            "dynamodb:DescribeStream",
-            "dynamodb:ListStreams"
+            "dynamodb:ListStreams",
+            "ssm:PutParameter",
+            "ssm:GetParameter",
+            "kms:Decrypt"
           ],
           "Effect": "Allow",
           "Resource": "*"
@@ -26,7 +28,8 @@
       ],
       "Version": "2012-10-17"
     },
-    "resource_type": "iam_policy"
+    "resource_type": "iam_policy",
+    "tags": {}
   },
   "Configuration": {
     "resource_type": "dynamodb_table",
@@ -35,7 +38,10 @@
     "read_capacity": 1,
     "write_capacity": 1,
     "global_indexes": [],
-    "autoscaling": []
+    "autoscaling": [],
+    "tags": {},
+    "stream_enabled": true,
+    "stream_view_type": "NEW_AND_OLD_IMAGES"
   },
   "Audit": {
     "resource_type": "dynamodb_table",
@@ -44,6 +50,7 @@
     "read_capacity": 1,
     "write_capacity": 1,
     "global_indexes": [],
-    "autoscaling": []
+    "autoscaling": [],
+    "tags": {}
   }
 }
