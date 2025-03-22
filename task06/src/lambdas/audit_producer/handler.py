@@ -1,69 +1,49 @@
-import datetime
 import os
-import uuid
-
-import boto3
 
 from commons.log_helper import get_logger
 from commons.abstract_lambda import AbstractLambda
+import boto3
+import uuid
+from datetime import datetime, timezone
 
-_LOG = get_logger('AuditProducer-handler')
+_LOG = get_logger(__name__)
 
 
 class AuditProducer(AbstractLambda):
 
     def validate_request(self, event) -> dict:
         pass
-        
+
     def handle_request(self, event, context):
-        """Explain incoming event here"""
-        _LOG.info(event)
+        """
+        Explain incoming event here
+        """
+        dynamodb = boto3.resource("dynamodb")
+        table_name = os.getenv('table_name')
 
-        dynamodb = boto3.resource('dynamodb')
-        conf_table_name = os.environ['CONFIGURATION_TABLE']
-        audit_table_name = os.environ['AUDIT_TABLE']
-        _LOG.info(f'CONFIGURATION_TABLE: {conf_table_name}')
-        _LOG.info(f'AUDIT_TABLE: {audit_table_name}')
-        table = dynamodb.Table(audit_table_name)
+        audit_table = dynamodb.Table(table_name)
 
-        now = datetime.datetime.now()
-        iso_format = now.isoformat()
+        conf_item = event.get("Records")[0]
+        audit_item = None
+        if conf_item["eventName"] == "INSERT":
+            audit_item = {"id": str(uuid.uuid4()),
+                          "itemKey": conf_item["dynamodb"]["NewImage"]["key"]["S"],
+                          "modificationTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                          "newValue": {
+                              "key": conf_item["dynamodb"]["NewImage"]["key"]["S"],
+                              "value": int(conf_item["dynamodb"]["NewImage"]["value"]["N"])
+                          },
+                          }
+        elif conf_item["eventName"] == "MODIFY":
+            audit_item = {"id": str(uuid.uuid4()),
+                          "itemKey": conf_item["dynamodb"]["NewImage"]["key"]["S"],
+                          "modificationTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                          "updatedAttribute": "value",
+                          "oldValue": int(conf_item["dynamodb"]["OldImage"]["value"]["N"]),
+                          "newValue": int(conf_item["dynamodb"]["NewImage"]["value"]["N"])
+                          }
 
-        if event['Records'][0]['eventName'] == 'INSERT':
-            item = {
-                "id": str(uuid.uuid4()),
-                "itemKey": event['Records'][0]['dynamodb']['Keys']['key']['S'],
-                "modificationTime": iso_format,
-                "newValue": {
-                    "key": event['Records'][0]['dynamodb']['NewImage']['key']['S'],
-                    "value": int(event['Records'][0]['dynamodb']['NewImage']['value']['N'])
-                }
-            }
-        elif event['Records'][0]['eventName'] == 'MODIFY':
-            item = {
-                "id": str(uuid.uuid4()),
-                "itemKey": event['Records'][0]['dynamodb']['Keys']['key']['S'],
-                "modificationTime": iso_format,
-                "updatedAttribute": "value",
-                "oldValue": int(event['Records'][0]['dynamodb']['OldImage']['value']['N']),
-                "newValue": int(event['Records'][0]['dynamodb']['NewImage']['value']['N'])
-            }
-
-        try:
-            response = table.put_item(Item=item)
-        except Exception as error:
-            _LOG.info(f'Error: {error}')
-            _LOG.info('Dirty hack!')
-            table = dynamodb.Table('cmtr-b5eedb66-Audit-test')
-            response = table.put_item(Item=item)
-
-        _LOG.info(f'DynamoDb response: {response}')
-        _LOG.info(f'Added item to Audit table: {item}')
-
-        return {
-            'message': 'Successfully added Audit record',
-            'response': response
-        }
+        audit_table.put_item(Item=audit_item)
 
 
 HANDLER = AuditProducer()
@@ -71,3 +51,5 @@ HANDLER = AuditProducer()
 
 def lambda_handler(event, context):
     return HANDLER.lambda_handler(event=event, context=context)
+
+ 

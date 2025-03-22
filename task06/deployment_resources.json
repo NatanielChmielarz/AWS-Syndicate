@@ -7,18 +7,20 @@
             "logs:CreateLogGroup",
             "logs:CreateLogStream",
             "logs:PutLogEvents",
-            "dynamodb:GetShardIterator",
-            "dynamodb:DescribeStream",
-            "dynamodb:ListStreams",
-            "dynamodb:GetRecords",
+            "ssm:PutParameter",
+            "ssm:GetParameter",
+            "kms:Decrypt",
             "dynamodb:GetItem",
             "dynamodb:Query",
             "dynamodb:PutItem",
             "dynamodb:Batch*",
             "dynamodb:DeleteItem",
-            "ssm:PutParameter",
-            "ssm:GetParameter",
-            "kms:Decrypt"
+            "dynamodb:Scan",
+            "dynamodb:UpdateItem",
+            "dynamodb:GetShardIterator",
+            "dynamodb:DescribeStream",
+            "dynamodb:ListStreams",
+            "dynamodb:GetRecords"
           ],
           "Effect": "Allow",
           "Resource": "*"
@@ -39,7 +41,7 @@
     "autoscaling": [],
     "tags": {}
   },
-  "${target_table}": {
+  "Audit": {
     "resource_type": "dynamodb_table",
     "hash_key_name": "id",
     "hash_key_type": "S",
@@ -47,15 +49,6 @@
     "write_capacity": 1,
     "global_indexes": [],
     "autoscaling": [],
-    "tags": {}
-  },
-  "audit_producer-role": {
-    "predefined_policies": [],
-    "principal_service": "lambda",
-    "custom_policies": [
-      "lambda-basic-execution"
-    ],
-    "resource_type": "iam_role",
     "tags": {}
   }
 }
