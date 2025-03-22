@@ -5,4 +5,4 @@ class ApplicationException(Exception):
         self.content = content
 
     def __str__(self):
-        return f"{self.code}:{self.content}"
+        return f'{self.code}:{self.content}'

@@ -12,8 +12,14 @@ RESPONSE_SERVICE_UNAVAILABLE_CODE = 503
 
 def build_response(content, code=200):
     if code == RESPONSE_OK_CODE:
-        return {"code": code, "body": content}
-    raise ApplicationException(code=code, content=content)
+        return {
+            'code': code,
+            'body': content
+        }
+    raise ApplicationException(
+        code=code,
+        content=content
+    )
 
 
 def raise_error_response(code, content):
