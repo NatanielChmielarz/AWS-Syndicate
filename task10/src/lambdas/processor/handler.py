@@ -8,7 +8,7 @@ from decimal import Decimal
 import requests
 _LOG = get_logger(__name__)
 
-dynamodb = boto3.resource('dynamodb')
+
 
 class Processor(AbstractLambda):
 
@@ -58,7 +58,8 @@ class Processor(AbstractLambda):
 
             item = json.loads(json.dumps(record), parse_float=Decimal)
 
-            table_name = os.environ['TARGET_TABLE']
+            table_name = os.getenv('table_name')
+            dynamodb = boto3.resource('dynamodb')
             _LOG.info(f"{table_name=}")
             table = dynamodb.Table(table_name)
             table.put_item(Item=item)
