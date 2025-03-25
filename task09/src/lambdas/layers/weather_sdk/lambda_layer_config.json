@@ -1,0 +1,8 @@
+{
+  "name": "weather_sdk",
+  "resource_type": "lambda_layer",
+  "runtimes": [
+    "python3.10"
+  ],
+  "deployment_package": "weather_sdk_layer.zip"
+}
