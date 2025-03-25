@@ -60,10 +60,10 @@ class Processor(AbstractLambda):
             _LOG.info(record)
             _LOG.info(forecast)
 
-        
+            item = json.loads(json.dumps(record), parse_float=Decimal)
 
            
-            table.put_item(Item=record)
+            table.put_item(Item=item)
 
             return res
         return 200
