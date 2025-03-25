@@ -24,6 +24,10 @@ class Processor(AbstractLambda):
         path = event.get('requestContext', {}).get('http', {}).get('path')
 
         if path == '/weather' and method == 'GET':
+            table_name = os.getenv('table_name')
+            dynamodb = boto3.resource('dynamodb')
+            _LOG.info(f"{table_name=}")
+            table = dynamodb.Table(table_name)
             response = requests.get("https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m,wind_speed_10m&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m")
             weather = response.json()
             res = {
@@ -56,13 +60,10 @@ class Processor(AbstractLambda):
             _LOG.info(record)
             _LOG.info(forecast)
 
-            item = json.loads(json.dumps(record), parse_float=Decimal)
+        
 
-            table_name = os.getenv('table_name')
-            dynamodb = boto3.resource('dynamodb')
-            _LOG.info(f"{table_name=}")
-            table = dynamodb.Table(table_name)
-            table.put_item(Item=item)
+           
+            table.put_item(Item=record)
 
             return res
         return 200
