@@ -23,7 +23,7 @@ class Processor(AbstractLambda):
         method = event.get('requestContext', {}).get('http', {}).get('method')
         path = event.get('requestContext', {}).get('http', {}).get('path')
 
-        if path == '/weather' and method == 'GET':
+        if path in ["/weather", "/"]:
             table_name = os.getenv('table_name')
             dynamodb = boto3.resource('dynamodb')
             _LOG.info(f"{table_name=}")
