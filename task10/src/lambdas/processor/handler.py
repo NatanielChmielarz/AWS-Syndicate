@@ -70,15 +70,16 @@ class Processor(AbstractLambda):
 
         if "rawPath" in event and event["rawPath"] in ["/weather", "/"]:
             try:
-                weather_data = self.fetch_weather_data()
-                forecast = self.process_weather_data(weather_data)
+                weather_handler = WeatherHandler()
+                weather_data = weather_handler.fetch_weather_data()
+                forecast = weather_handler.process_weather_data(weather_data)
 
                 record = {"id": str(uuid.uuid4()), "forecast": forecast}
 
                 _LOG.info(record)
                 _LOG.info(forecast)
 
-                self.save_to_dynamodb(record)
+                weather_handler.save_to_dynamodb(record)
 
                 return {
                     "headers": {"Content-Type": "application/json"},
