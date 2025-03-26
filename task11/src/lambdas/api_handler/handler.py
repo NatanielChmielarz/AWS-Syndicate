@@ -49,26 +49,55 @@ class ApiHandler(AbstractLambda):
 
     def signin(self, event):
         body = json.loads(event['body'])
-        try:
-            response = self.cognito.admin_initiate_auth(
-                UserPoolId=self.user_pool_id,
-                ClientId=self.client_id,
-                AuthFlow='ADMIN_NO_SRP_AUTH',
-                AuthParameters={'USERNAME': body['email'], 'PASSWORD': body['password']}
-            )
-            if 'ChallengeName' in response and response['ChallengeName'] == 'NEW_PASSWORD_REQUIRED':
-                new_password = body['password'] + str(random.randrange(1, 100))
-                challenge_response = self.cognito.respond_to_auth_challenge(
-                    ClientId=self.client_id,
-                    ChallengeName='NEW_PASSWORD_REQUIRED',
-                    Session=response['Session'],
-                    ChallengeResponses={'USERNAME': body['email'], 'NEW_PASSWORD': new_password, 'USER_ID_FOR_SRP': body['email']}
-                )
-                return {'statusCode': 200, 'body': json.dumps({'accessToken': challenge_response['AuthenticationResult']['AccessToken']})}
-            return {'statusCode': 200, 'body': json.dumps(response['AuthenticationResult'])}
-        except Exception as e:
-            return {'statusCode': 400, 'body': json.dumps({'message': 'Bad request', 'error': str(e)})}
+        email = body.get('email')
+        password = body.get('password')
 
+        try:
+            auth_params = {
+                'USERNAME': email,
+                'PASSWORD': password
+            }
+            response = self.cognito.admin_initiate_auth(
+                UserPoolId=os.environ.get('cup_id'),
+                ClientId=os.environ.get('cup_client_id'),
+                AuthFlow='ADMIN_NO_SRP_AUTH', AuthParameters=auth_params)
+
+            _LOG.info(f'authentication response:\n{str(response)}')
+
+            new_password = None
+            if 'ChallengeName' in response and response['ChallengeName'] == 'NEW_PASSWORD_REQUIRED':
+                _LOG.info('setting new password')
+                new_password = password + str(random.randrange(1, 100))
+                if password:
+                    challenge_response = self.cognito.respond_to_auth_challenge(
+                        ClientId=self.client_id,
+                        ChallengeName='NEW_PASSWORD_REQUIRED',
+                        Session=response['Session'],
+                        ChallengeResponses={
+                            'USERNAME': email,
+                            'NEW_PASSWORD': new_password
+                        }
+                    )
+                    _LOG.info(f'challenge_response:\n{str(challenge_response)}')
+                    return challenge_response['AuthenticationResult']['AccessToken']
+                else:
+                    return "New password is required. Please provide a new password."
+
+            access_token = response['AuthenticationResult']['IdToken']
+
+            return {
+                'statusCode': 200,
+                'body': json.dumps({'accessToken': access_token, 'new_password': new_password}),
+                "isBase64Encoded": True
+            }
+        except Exception as e:
+            _LOG.error('error in signin...')
+            _LOG.error(e)
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'message': 'Bad request', 'error': str(e)}),
+                "isBase64Encoded": True
+            }
     def get_tables(self, event):
         try:
             response = self.tables_table.scan()
