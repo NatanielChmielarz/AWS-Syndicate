@@ -63,32 +63,59 @@ class ApiHandler(AbstractLambda):
             return {'statusCode': 400, 'body': json.dumps({'message': 'Something went wrong'})}
 
     def signup(self, body):
-        response = self.client.admin_create_user(
-            UserPoolId=self.user_pool_id,
-            Username=body['email'],
-            UserAttributes=[
-                {'Name': 'email', 'Value': body['email']},
-                {'Name': 'given_name', 'Value': body['firstName']},
-                {'Name': 'family_name', 'Value': body['lastName']}
-            ],
-            TemporaryPassword=body['password'],
-            MessageAction='SUPPRESS'
-        )
-        self.client.admin_set_user_password(
-            UserPoolId=self.user_pool_id,
-            Username=body['email'],
-            Password=body['password'],
-            Permanent=True
-        )
-        return {'statusCode': 200, 'body': json.dumps({'message': 'Sign-up successful'})}
+        try:
+            response = self.client.admin_create_user(
+                UserPoolId=self.user_pool_id,
+                Username=body['email'],
+                UserAttributes=[
+                    {'Name': 'email', 'Value': body['email']},
+                    {'Name': 'given_name', 'Value': body['firstName']},
+                    {'Name': 'family_name', 'Value': body['lastName']}
+                ],
+                TemporaryPassword=body['password'],
+                MessageAction='SUPPRESS'
+            )
+            _LOG.info(f'User created: {response}')
+
+            self.client.admin_set_user_password(
+                UserPoolId=self.user_pool_id,
+                Username=body['email'],
+                Password=body['password'],
+                Permanent=True
+            )
+            return {'statusCode': 200, 'body': json.dumps({'message': 'Sign-up successful'})}
+
+        except self.client.exceptions.InvalidParameterException as e:
+            _LOG.error(f'Invalid signup request: {e}')
+            return {'statusCode': 400, 'body': json.dumps({'message': 'Invalid signup data'})}
+
+        except self.client.exceptions.UsernameExistsException:
+            return {'statusCode': 400, 'body': json.dumps({'message': 'User already exists'})}
+
+        except Exception as e:
+            _LOG.error(f'Signup error: {e}')
+            return {'statusCode': 500, 'body': json.dumps({'message': 'Internal server error'})}
+
 
     def signin(self, body):
-        response = self.client.initiate_auth(
-            AuthFlow='USER_PASSWORD_AUTH',
-            AuthParameters={'USERNAME': body['email'], 'PASSWORD': body['password']},
-            ClientId=self.client_app_id
-        )
-        return {'statusCode': 200, 'body': json.dumps({'accessToken': response['AuthenticationResult']['IdToken']})}
+        try:
+            response = self.client.initiate_auth(
+                AuthFlow='USER_PASSWORD_AUTH',
+                AuthParameters={'USERNAME': body['email'], 'PASSWORD': body['password']},
+                ClientId=self.client_app_id
+            )
+            return {'statusCode': 200, 'body': json.dumps({'accessToken': response['AuthenticationResult']['IdToken']})}
+
+        except self.client.exceptions.NotAuthorizedException:
+            return {'statusCode': 400, 'body': json.dumps({'message': 'Invalid credentials'})}
+
+        except self.client.exceptions.UserNotFoundException:
+            return {'statusCode': 400, 'body': json.dumps({'message': 'User does not exist'})}
+
+        except Exception as e:
+            _LOG.error(f'Signin error: {e}')
+            return {'statusCode': 500, 'body': json.dumps({'message': 'Internal server error'})}
+
 
     def get_tables(self):
         response = self.tables_table.scan()
