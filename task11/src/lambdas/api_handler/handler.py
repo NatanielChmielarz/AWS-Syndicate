@@ -86,14 +86,23 @@ class ApiHandler(AbstractLambda):
     def get_tables(self, event):
         try:
             response = self.tables_table.scan()
-            return self._json_response(200, {'tables': response['Items']})
+            items = response['Items']
+            return self._json_response(200, {'tables': sorted(items, key=lambda item: item['id'])})
         except Exception as e:
             return self._json_response(400, {'message': 'Bad request', 'error': str(e)})
 
     def create_table(self, event):
         body = json.loads(event['body'])
         try:
-            self.tables_table.put_item(Item=body)
+            item = {
+                 "id": int(body['id']),
+                 "number": body['number'],
+                 "places": body['places'],
+                 "isVip": body['isVip'],
+                 "minOrder": body['minOrder']
+             }
+            item = json.loads(json.dumps(item))
+            self.tables_table.put_item(Item=item)
             return self._json_response(200, {'id': body['id']})
         except Exception as e:
             return self._json_response(400, {'message': 'Bad request', 'error': str(e)})
@@ -130,6 +139,10 @@ class ApiHandler(AbstractLambda):
     def get_reservations(self, event):
         try:
             response = self.reservations_table.scan()
+            items = response['Items']
+            for i in items:
+                del i["id"]
+            items = sorted(items, key=lambda item: item['tableNumber'])
             return self._json_response(200, {'reservations': response['Items']})
         except Exception as e:
             return self._json_response(400, {'message': 'Bad request', 'error': str(e)})
