@@ -4,227 +4,131 @@ import boto3
 import json
 import uuid
 import os
-import random
 from decimal import Decimal
+from datetime import datetime
 
 _LOG = get_logger('ApiHandler-handler')
 
-class DecimalEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            return float(obj)
-        return super(DecimalEncoder, self).default(obj)
-
 class ApiHandler(AbstractLambda):
-
     def __init__(self):
-        self.cognito = boto3.client('cognito-idp')
+        self.client = boto3.client('cognito-idp')
         self.dynamodb = boto3.resource('dynamodb')
-        self.user_pool_id = os.getenv('cup_id')
-        self.client_id = os.getenv('cup_client_id')
-        self.tables_table = self.dynamodb.Table(os.environ.get('tables', "test1"))
-        self.reservations_table = self.dynamodb.Table(os.environ.get('reservations', "test2"))
+        self.user_pool_id = self.get_user_pool_id()
+        self.client_app_id = self.get_client_app_id()
+        self.tables_table = self.dynamodb.Table(os.environ['TABLES'])
+        self.reservations_table = self.dynamodb.Table(os.environ['RESERVATIONS'])
 
-    def signup(self, event):
-        body = json.loads(event['body'])
-        email = body.get('email')
-        password = body.get('password')
-        _LOG.info("Preparing signup. Email: %s", email)
+    def get_user_pool_id(self):
+        user_pool_name = os.environ['USER_POOL']
+        response = self.client.list_user_pools(MaxResults=60)
+        for user_pool in response['UserPools']:
+            if user_pool['Name'] == user_pool_name:
+                return user_pool['Id']
+        return None
 
-        if not email or not password:
-            _LOG.error("Signup failed. Missing email or password.")
-            return {
-                "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({'message': 'Missing email or password in signup.'})
-            }
+    def get_client_app_id(self):
+        response = self.client.list_user_pool_clients(UserPoolId=self.user_pool_id)
+        for user_pool_client in response['UserPoolClients']:
+            if user_pool_client['ClientName'] == 'client-app':
+                return user_pool_client['ClientId']
+        return None
 
-        try:
-            _LOG.info("Attempting sign_up with Cognito. Email: %s", email)
-            self.cognito.sign_up(
-                ClientId=self.client_id,
-                Username=email,
-                Password=password,
-                UserAttributes=[{'Name': 'email', 'Value': email}]
-            )
-            _LOG.info("Sign_up call succeeded. Now confirming sign_up in admin mode.")
-            self.cognito.admin_confirm_sign_up(
-                UserPoolId=self.user_pool_id,
-                Username=email
-            )
-        except Exception as e:
-            _LOG.error(f"Sign up error for email '{email}': {str(e)}")
-            _LOG.exception(e)
-            return {
-                "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({
-                    'message': f'Cannot create user {email}. Error: {str(e)}'
-                })
-            }
-
-        _LOG.info("User %s was created and confirmed successfully.", email)
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({'message': f'User {email} was created.'})
-        }
-
-    def signin(self, event):
-        body = json.loads(event.get('body', '{}'))
-        email = body.get('email')
-        password = body.get('password')
-        _LOG.info("Preparing signin. Email: %s", email)
-
-        if not email or not password:
-            _LOG.error("Signin failed. Missing email or password.")
-            return {
-                "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({'message': 'Missing email or password in signin.'})
-            }
-
-        try:
-            _LOG.info("Attempting admin_initiate_auth for email: %s", email)
-            auth_result = self.cognito.admin_initiate_auth(
-                UserPoolId=self.user_pool_id,
-                ClientId=self.client_id,
-                AuthFlow='ADMIN_USER_PASSWORD_AUTH',
-                AuthParameters={
-                    'USERNAME': email,
-                    'PASSWORD': password
-                }
-            )
-
-            _LOG.info("admin_initiate_auth response: %s", auth_result)
-
-            if auth_result and 'AuthenticationResult' in auth_result:
-                id_token = auth_result['AuthenticationResult'].get('IdToken')
-                _LOG.info("Signin success for user: %s", email)
-                return {
-                    "statusCode": 200,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({"accessToken": id_token})
-                }
-            else:
-                _LOG.error("Signin failed. AuthenticationResult missing or invalid.")
-                return {
-                    "statusCode": 400,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps({'message': 'Unable to authenticate user.'})
-                }
-        except self.cognito.exceptions.NotAuthorizedException:
-            return {
-                "statusCode": 401,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({'message': 'Incorrect email or password'})
-            }
-        except self.cognito.exceptions.UserNotFoundException:
-            return {
-                "statusCode": 404,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({'message': 'User not found'})
-            }
-        except Exception as e:
-            _LOG.error(f"Sign in error for email '{email}': {str(e)}")
-            _LOG.exception(e)
-            return {
-                "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({'message': 'Invalid login.'})
-            }
-
-    def get_tables(self, event):
-        try:
-            response = self.tables_table.scan()
-            return {'statusCode': 200, 'body': json.dumps({'tables': response['Items']}, cls=DecimalEncoder)}
-        except Exception as e:
-            return {'statusCode': 400, 'body': json.dumps({'message': 'Bad request', 'error': str(e)})}
-
-    def create_table(self, event):
-        body = json.loads(event['body'])
-        try:
-            self.tables_table.put_item(
-                Item={'id': body['id'], 'number': body['number'], 'places': body['places'], 'isVip': body['isVip'], 'minOrder': body['minOrder']}
-            )
-            return {'statusCode': 200, 'body': json.dumps({'id': body['id']})}
-        except Exception as e:
-            return {'statusCode': 400, 'body': json.dumps({'message': 'Bad request', 'error': str(e)})}
-
-    def get_table_by_id(self, event):
-        table_id = event['pathParameters']['tableId']
-        try:
-            response = self.tables_table.get_item(Key={'id': int(table_id)} if table_id.isdigit() else {'id': table_id})
-            if 'Item' in response:
-                return {'statusCode': 200, 'body': json.dumps(response['Item'], cls=DecimalEncoder)}
-            return {'statusCode': 404, 'body': json.dumps({'message': 'Table not found'})}
-        except Exception as e:
-            return {'statusCode': 400, 'body': json.dumps({'message': 'Bad request', 'error': str(e)})}
-
-    def create_reservation(self, event):
-        body = json.loads(event['body'])
-        reservation_id = str(uuid.uuid4())
-        try:
-            table_check_response = self.tables_table.scan(
-                FilterExpression="#n = :table_number",
-                ExpressionAttributeNames={"#n": "number"},
-                ExpressionAttributeValues={":table_number": body['tableNumber']}
-            )
-            if not table_check_response['Items']:
-                return {'statusCode': 400, 'body': json.dumps({'message': f'Table with number {body["tableNumber"]} does not exist.'})}
-
-            existing_reservations = self.reservations_table.query(
-                IndexName="tableNumber-date-index",
-                KeyConditionExpression="tableNumber = :tn AND #d = :date",
-                ExpressionAttributeNames={"#d": "date"},
-                ExpressionAttributeValues={":tn": body['tableNumber'], ":date": body['date']}
-            )
-            for reservation in existing_reservations['Items']:
-                if body['slotTimeStart'] < reservation['slotTimeEnd'] and body['slotTimeEnd'] > reservation['slotTimeStart']:
-                    return {'statusCode': 400, 'body': json.dumps({'message': 'Time conflict: The table is already reserved for this time slot.'})}
-
-            self.reservations_table.put_item(
-                Item={'id': reservation_id, 'tableNumber': body['tableNumber'], 'clientName': body['clientName'],
-                      'phoneNumber': body['phoneNumber'], 'date': body['date'], 'slotTimeStart': body['slotTimeStart'],
-                      'slotTimeEnd': body['slotTimeEnd']}
-            )
-            return {'statusCode': 200, 'body': json.dumps({'reservationId': reservation_id})}
-        except Exception as e:
-            return {'statusCode': 400, 'body': json.dumps({'message': 'Bad request', 'error': str(e)})}
-
-    def get_reservations(self, event):
-        try:
-            response = self.reservations_table.scan()
-            return {'statusCode': 200, 'body': json.dumps({'reservations': response['Items']}, cls=DecimalEncoder)}
-        except Exception as e:
-            return {'statusCode': 400, 'body': json.dumps({'message': 'Bad request', 'error': str(e)})}
-
-    def validate_request(self, event) -> dict:
-        if 'body' not in event:
-            return {'statusCode': 400, 'body': json.dumps({'message': 'Missing request body'})}
-        try:
-            json.loads(event['body'])
-        except json.JSONDecodeError:
-            return {'statusCode': 400, 'body': json.dumps({'message': 'Invalid JSON format'})}
-        return {'statusCode': 200, 'body': json.dumps({'message': 'Valid request'})}
+    def decimal_serializer(self, obj):
+        if isinstance(obj, Decimal):
+            return int(obj)
+        raise TypeError("Type not serializable")
 
     def handle_request(self, event, context):
-        route_key = f"{event['httpMethod']} {event['resource']}"
-        if route_key == 'POST /signup':
-            return self.signup(event)
-        elif route_key == 'POST /signin':
-            return self.signin(event)
-        elif route_key == 'GET /tables':
-            return self.get_tables(event)
-        elif route_key == 'POST /tables':
-            return self.create_table(event)
-        elif route_key == 'GET /tables/{tableId}':
-            return self.get_table_by_id(event)
-        elif route_key == 'POST /reservations':
-            return self.create_reservation(event)
-        elif route_key == 'GET /reservations':
-            return self.get_reservations(event)
-        return {'statusCode': 400, 'body': json.dumps({'message': 'Invalid route'})}
+        path = event['path']
+        http_method = event['httpMethod']
+        _LOG.info(f'{path} {http_method}')
+
+        try:
+            if path == '/signup' and http_method == 'POST':
+                return self.signup(json.loads(event['body']))
+            elif path == '/signin' and http_method == 'POST':
+                return self.signin(json.loads(event['body']))
+            elif path == '/tables' and http_method == 'GET':
+                return self.get_tables()
+            elif path == '/tables' and http_method == 'POST':
+                return self.create_table(json.loads(event['body']))
+            elif event['resource'] == '/tables/{tableId}' and http_method == 'GET':
+                return self.get_table(event)
+            elif path == '/reservations' and http_method == 'GET':
+                return self.get_reservations()
+            elif path == '/reservations' and http_method == 'POST':
+                return self.create_reservation(json.loads(event['body']))
+        except Exception as e:
+            _LOG.error(f'Error: {e}')
+            return {'statusCode': 400, 'body': json.dumps({'message': 'Something went wrong'})}
+
+    def signup(self, body):
+        response = self.client.admin_create_user(
+            UserPoolId=self.user_pool_id,
+            Username=body['email'],
+            UserAttributes=[
+                {'Name': 'email', 'Value': body['email']},
+                {'Name': 'given_name', 'Value': body['firstName']},
+                {'Name': 'family_name', 'Value': body['lastName']}
+            ],
+            TemporaryPassword=body['password'],
+            MessageAction='SUPPRESS'
+        )
+        self.client.admin_set_user_password(
+            UserPoolId=self.user_pool_id,
+            Username=body['email'],
+            Password=body['password'],
+            Permanent=True
+        )
+        return {'statusCode': 200, 'body': json.dumps({'message': 'Sign-up successful'})}
+
+    def signin(self, body):
+        response = self.client.initiate_auth(
+            AuthFlow='USER_PASSWORD_AUTH',
+            AuthParameters={'USERNAME': body['email'], 'PASSWORD': body['password']},
+            ClientId=self.client_app_id
+        )
+        return {'statusCode': 200, 'body': json.dumps({'accessToken': response['AuthenticationResult']['IdToken']})}
+
+    def get_tables(self):
+        response = self.tables_table.scan()
+        return {'statusCode': 200, 'body': json.dumps({'tables': sorted(response['Items'], key=lambda item: item['id'])}, default=self.decimal_serializer)}
+
+    def create_table(self, body):
+        item = {"id": int(body['id']), "number": body['number'], "places": body['places'], "isVip": body['isVip'], "minOrder": body['minOrder']}
+        self.tables_table.put_item(Item=item)
+        return {'statusCode': 200, 'body': json.dumps({'id': body['id']})}
+
+    def get_table(self, event):
+        table_id = int(event['path'].split('/')[-1])
+        item = self.tables_table.get_item(Key={'id': table_id})
+        return {'statusCode': 200, 'body': json.dumps(item['Item'], default=self.decimal_serializer)}
+
+    def get_reservations(self):
+        response = self.reservations_table.scan()
+        for item in response['Items']:
+            del item['id']
+        return {'statusCode': 200, 'body': json.dumps({'reservations': sorted(response['Items'], key=lambda item: item['tableNumber'])}, default=self.decimal_serializer)}
+
+    def create_reservation(self, body):
+        tables = {table['number'] for table in self.tables_table.scan()['Items']}
+        if body['tableNumber'] not in tables:
+            raise ValueError("No such table.")
+
+        proposed_start = datetime.strptime(body["slotTimeStart"], "%H:%M").time()
+        proposed_end = datetime.strptime(body["slotTimeEnd"], "%H:%M").time()
+
+        reservations = self.reservations_table.scan()['Items']
+        for res in reservations:
+            if res['tableNumber'] == body['tableNumber'] and res['date'] == body['date']:
+                res_start = datetime.strptime(res["slotTimeStart"], "%H:%M").time()
+                res_end = datetime.strptime(res["slotTimeEnd"], "%H:%M").time()
+                if any(res_start <= t <= res_end for t in (proposed_start, proposed_end)):
+                    raise ValueError('Time already reserved')
+
+        reservation_id = str(uuid.uuid4())
+        self.reservations_table.put_item(Item={"id": reservation_id, **body})
+        return {'statusCode': 200, 'body': json.dumps({'reservationId': reservation_id})}
 
 HANDLER = ApiHandler()
 
