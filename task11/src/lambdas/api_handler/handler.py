@@ -6,7 +6,8 @@ import uuid
 import os
 import random
 from decimal import Decimal
-
+from datetime import datetime
+from boto3.dynamodb.conditions import Key
 _LOG = get_logger('ApiHandler-handler')
 
 
@@ -117,25 +118,57 @@ class ApiHandler(AbstractLambda):
             return self._json_response(400, {'message': 'Bad request', 'error': str(e)})
 
     def create_reservation(self, event):
-        body = json.loads(event['body'])
-        reservation_id = str(uuid.uuid4())
-
         try:
-            existing_reservations = self.reservations_table.scan(
-                FilterExpression='#tn = :table_number AND #d = :date',
-                ExpressionAttributeNames={'#tn': 'tableNumber', '#d': 'date'},
-                ExpressionAttributeValues={':table_number': body['tableNumber'], ':date': body['date']}
-            )
-            
-            for res in existing_reservations['Items']:
-                if body['slotTimeStart'] < res['slotTimeEnd'] and body['slotTimeEnd'] > res['slotTimeStart']:
-                    return self._json_response(400, {'message': 'Time conflict: Table is already reserved.'})
-            
-            self.reservations_table.put_item(Item={**body, 'id': reservation_id})
-            return self._json_response(200, {'reservationId': reservation_id})
-        except Exception as e:
-            return self._json_response(400, {'message': 'Bad request', 'error': str(e)})
+            body = json.loads(event['body'])
+            _LOG.info(f"Received reservation request: {body}")
 
+            required_fields = ['tableNumber', 'date', 'slotTimeStart', 'slotTimeEnd']
+            if not all(field in body for field in required_fields):
+                return self._json_response(400, {'message': 'Missing required fields'})
+
+            table_number = body['tableNumber']
+            date = body['date']
+            slot_start = body['slotTimeStart']
+            slot_end = body['slotTimeEnd']
+
+            tables_response = self.tables_table.scan()
+            table_numbers = {table["number"] for table in tables_response['Items']}
+            
+            if table_number not in table_numbers:
+                return self._json_response(400, {'message': 'Table does not exist'})
+            proposed_start = datetime.strptime(slot_start, "%H:%M").time()
+            proposed_end = datetime.strptime(slot_end, "%H:%M").time()
+
+            reservations_response = self.reservations_table.query(
+                IndexName="tableNumber-date-index",
+                KeyConditionExpression=Key('tableNumber').eq(table_number) & Key('date').eq(date)
+            )
+
+            for res in reservations_response.get('Items', []):
+                existing_start = datetime.strptime(res["slotTimeStart"], "%H:%M").time()
+                existing_end = datetime.strptime(res["slotTimeEnd"], "%H:%M").time()
+
+                if proposed_start < existing_end and proposed_end > existing_start:
+                    return self._json_response(400, {'message': 'Time conflict: Table is already reserved.'})
+
+            reservation_id = str(uuid.uuid4())
+            self.reservations_table.put_item(Item={"id": reservation_id, **body})
+
+            _LOG.info(f"Reservation created successfully: {reservation_id}")
+
+            return self._json_response(200, {'reservationId': reservation_id})
+
+        except json.JSONDecodeError:
+            _LOG.error("Invalid JSON format in request body")
+            return self._json_response(400, {'message': 'Invalid JSON format'})
+
+        except KeyError as e:
+            _LOG.error(f"Missing required field: {str(e)}")
+            return self._json_response(400, {'message': f'Missing required field: {str(e)}'})
+
+        except Exception as e:
+            _LOG.exception("Unexpected error while creating reservation")
+            return self._json_response(500, {'message': 'Internal server error', 'error': str(e)})
     def get_reservations(self, event):
         try:
             response = self.reservations_table.scan()
@@ -152,9 +185,11 @@ class ApiHandler(AbstractLambda):
             ('POST', '/signup'): self.signup,
             ('POST', '/signin'): self.signin,
             ('GET', '/tables'): self.get_tables,
+            ('GET','/tables/{tableId}'):self.get_table_by_id,
             ('POST', '/tables'): self.create_table,
             ('POST', '/reservations'): self.create_reservation,
-            ('GET', '/reservations'): self.get_reservations
+            ('GET', '/reservations'): self.get_reservations,
+            
         }
         route_key = (event['httpMethod'], event.get('resource'))
         
