@@ -1,0 +1,77 @@
+{
+    "info": {
+      "name": "API Tests",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+      {
+        "name": "Sign In",
+        "request": {
+          "method": "POST",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "url": { "raw": "https://1xumpksodl.execute-api.eu-west-1.amazonaws.com/api/signin" },
+          "body": {
+            "mode": "raw",
+            "raw": "{\"email\": \"test@example.com\", \"password\": \"TestPassword123\"}"
+          }
+        }
+      },
+      {
+        "name": "Sign Up",
+        "request": {
+          "method": "POST",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "url": { "raw": "https://1xumpksodl.execute-api.eu-west-1.amazonaws.com/api/signup" },
+          "body": {
+            "mode": "raw",
+            "raw": "{\"firstName\": \"John\", \"lastName\": \"Doe\", \"email\": \"john.doe@example.com\", \"password\": \"SecurePassword123\"}"
+          }
+        }
+      },
+      {
+        "name": "Get Tables",
+        "request": {
+          "method": "GET",
+          "url": { "raw": "https://1xumpksodl.execute-api.eu-west-1.amazonaws.com/api/tables" }
+        }
+      },
+      {
+        "name": "Create Table",
+        "request": {
+          "method": "POST",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "url": { "raw": "https://1xumpksodl.execute-api.eu-west-1.amazonaws.com/api/tables" },
+          "body": {
+            "mode": "raw",
+            "raw": "{\"id\": 123, \"number\": 5, \"places\": 4, \"isVip\": false, \"minOrder\": 50}"
+          }
+        }
+      },
+      {
+        "name": "Get Table By ID",
+        "request": {
+          "method": "GET",
+          "url": { "raw": "https://1xumpksodl.execute-api.eu-west-1.amazonaws.com/api/tables/123" }
+        }
+      },
+      {
+        "name": "Get Reservations",
+        "request": {
+          "method": "GET",
+          "url": { "raw": "https://1xumpksodl.execute-api.eu-west-1.amazonaws.com/api/reservations" }
+        }
+      },
+      {
+        "name": "Create Reservation",
+        "request": {
+          "method": "POST",
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "url": { "raw": "https://1xumpksodl.execute-api.eu-west-1.amazonaws.com/api/reservations" },
+          "body": {
+            "mode": "raw",
+            "raw": "{\"tableNumber\": 5, \"clientName\": \"Alice Smith\", \"phoneNumber\": \"+48123456789\", \"date\": \"2025-04-10\", \"slotTimeStart\": \"18:00\", \"slotTimeEnd\": \"20:00\"}"
+          }
+        }
+      }
+    ]
+  }
