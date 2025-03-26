@@ -52,7 +52,7 @@ class ApiHandler(AbstractLambda):
             _LOG.info(f'Sign-up response: {response}')
             
             if not response.get('UserConfirmed'):
-                confirm_resp = self.cognito_client.admin_confirm_sign_up(
+                confirm_resp = self.cognito.admin_confirm_sign_up(
                     UserPoolId=self.user_pool_id, Username=body['email']
                 )
                 _LOG.info(f'Confirm response: {confirm_resp}')
