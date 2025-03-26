@@ -76,9 +76,9 @@ class ApiHandler(AbstractLambda):
             _LOG.info(f'Authentication response: {response}')
             
             if response:
-                return self._json_response(200, {'IdToken': response['AuthenticationResult']['IdToken']})
+                return self._json_response(200, {"idToken": response['AuthenticationResult']['IdToken']})
             else: 
-                return self._json_response(200, {'IdToken': None})
+                return self._json_response(200, {"idToken": None})
         except Exception as e:
             _LOG.error(f'Error in signin: {e}')
             return self._json_response(400, {'message': 'Bad request', 'error': str(e)})
