@@ -75,7 +75,7 @@ class ApiHandler(AbstractLambda):
             )
             _LOG.info(f'Authentication response: {response}')
             
-            if response.get('ChallengeName') == 'NEW_PASSWORD_REQUIRED':
+            if response:
                 new_password = body['password'] + str(random.randint(1, 100))
                 challenge_response = self.cognito.respond_to_auth_challenge(
                     ClientId=self.client_id,
@@ -83,7 +83,7 @@ class ApiHandler(AbstractLambda):
                     Session=response['Session'],
                     ChallengeResponses={'USERNAME': body['email'], 'NEW_PASSWORD': new_password}
                 )
-                return self._json_response(200, {'accessToken': challenge_response['AuthenticationResult']['AccessToken']})
+                return self._json_response(200, {'accessToken': challenge_response['AuthenticationResult']['IdToken']})
             
             return self._json_response(200, {'accessToken': response['AuthenticationResult']['IdToken']})
         except Exception as e:
