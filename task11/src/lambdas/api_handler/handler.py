@@ -46,58 +46,54 @@ class ApiHandler(AbstractLambda):
             return {'statusCode': 200, 'body': json.dumps({'message': 'Sign-up successful'})}
         except Exception as e:
             return {'statusCode': 400, 'body': json.dumps({'message': 'Bad request', 'error': str(e)})}
-
     def signin(self, event):
-        body = json.loads(event['body'])
+        body = json.loads(event.get('body', '{}'))
         email = body.get('email')
         password = body.get('password')
 
+        if not email or not password:
+            return {'statusCode': 400, 'body': json.dumps({'message': 'Email and password are required'})}
+
         try:
-            auth_params = {
-                'USERNAME': email,
-                'PASSWORD': password
-            }
+            auth_params = {'USERNAME': email, 'PASSWORD': password}
             response = self.cognito.admin_initiate_auth(
-                UserPoolId=os.environ.get('cup_id'),
-                ClientId=os.environ.get('cup_client_id'),
-                AuthFlow='ADMIN_NO_SRP_AUTH', AuthParameters=auth_params)
+                UserPoolId=self.user_pool_id,
+                ClientId=self.client_id,
+                AuthFlow='ADMIN_NO_SRP_AUTH',
+                AuthParameters=auth_params
+            )
 
-            _LOG.info(f'authentication response:\n{str(response)}')
+            if response.get('ChallengeName') == 'NEW_PASSWORD_REQUIRED':
+                return {'statusCode': 400, 'body': json.dumps({'message': 'New password required'})}
 
-            new_password = None
-            if 'ChallengeName' in response and response['ChallengeName'] == 'NEW_PASSWORD_REQUIRED':
-                _LOG.info('setting new password')
-                new_password = password + str(random.randrange(1, 100))
-                if password:
-                    challenge_response = self.cognito.respond_to_auth_challenge(
-                        ClientId=self.client_id,
-                        ChallengeName='NEW_PASSWORD_REQUIRED',
-                        Session=response['Session'],
-                        ChallengeResponses={
-                            'USERNAME': email,
-                            'NEW_PASSWORD': new_password
-                        }
-                    )
-                    _LOG.info(f'challenge_response:\n{str(challenge_response)}')
-                    return challenge_response['AuthenticationResult']['AccessToken']
-                else:
-                    return "New password is required. Please provide a new password."
+            auth_result = response.get('AuthenticationResult', {})
+            access_token = auth_result.get('AccessToken')
+            id_token = auth_result.get('IdToken')
+            refresh_token = auth_result.get('RefreshToken')
 
-            access_token = response['AuthenticationResult']['IdToken']
+            if not id_token:
+                return {'statusCode': 500, 'body': json.dumps({'message': 'Authentication successful, but no ID token received'})}
 
             return {
                 'statusCode': 200,
-                'body': json.dumps({'accessToken': access_token, 'new_password': new_password}),
-                "isBase64Encoded": True
+                'body': json.dumps({
+                    'accessToken': access_token,
+                    'idToken': id_token,
+                    'refreshToken': refresh_token
+                }),
+                "isBase64Encoded": False
             }
+
+        except self.cognito.exceptions.NotAuthorizedException:
+            return {'statusCode': 401, 'body': json.dumps({'message': 'Incorrect email or password'})}
+
+        except self.cognito.exceptions.UserNotFoundException:
+            return {'statusCode': 404, 'body': json.dumps({'message': 'User not found'})}
+
         except Exception as e:
-            _LOG.error('error in signin...')
-            _LOG.error(e)
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'message': 'Bad request', 'error': str(e)}),
-                "isBase64Encoded": True
-            }
+            _LOG.error(f'Error in signin: {str(e)}')
+            return {'statusCode': 500, 'body': json.dumps({'message': 'Internal server error'})}
+
     def get_tables(self, event):
         try:
             response = self.tables_table.scan()
