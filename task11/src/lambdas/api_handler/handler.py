@@ -76,16 +76,9 @@ class ApiHandler(AbstractLambda):
             _LOG.info(f'Authentication response: {response}')
             
             if response:
-                new_password = body['password'] + str(random.randint(1, 100))
-                challenge_response = self.cognito.respond_to_auth_challenge(
-                    ClientId=self.client_id,
-                    ChallengeName='NEW_PASSWORD_REQUIRED',
-                    Session=response['Session'],
-                    ChallengeResponses={'USERNAME': body['email'], 'NEW_PASSWORD': new_password}
-                )
-                return self._json_response(200, {'accessToken': challenge_response['AuthenticationResult']['IdToken']})
-            
-            return self._json_response(200, {'accessToken': response['AuthenticationResult']['IdToken']})
+                return self._json_response(200, {'IdToken': response['AuthenticationResult']['IdToken']})
+            else: 
+                return self._json_response(200, {'IdToken': None})
         except Exception as e:
             _LOG.error(f'Error in signin: {e}')
             return self._json_response(400, {'message': 'Bad request', 'error': str(e)})
