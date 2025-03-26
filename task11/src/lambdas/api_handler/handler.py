@@ -27,72 +27,112 @@ class ApiHandler(AbstractLambda):
 
     def signup(self, event):
         body = json.loads(event['body'])
+        email = body.get('email')
+        password = body.get('password')
+        _LOG.info("Preparing signup. Email: %s", email)
+
+        if not email or not password:
+            _LOG.error("Signup failed. Missing email or password.")
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({'message': 'Missing email or password in signup.'})
+            }
+
         try:
-            response = self.cognito.sign_up(
+            _LOG.info("Attempting sign_up with Cognito. Email: %s", email)
+            self.cognito.sign_up(
                 ClientId=self.client_id,
-                Username=body['email'],
-                Password=body['password'],
-                UserAttributes=[
-                    {'Name': 'email', 'Value': body['email']},
-                    {'Name': 'given_name', 'Value': body['firstName']},
-                    {'Name': 'family_name', 'Value': body['lastName']},
-                ],
+                Username=email,
+                Password=password,
+                UserAttributes=[{'Name': 'email', 'Value': email}]
             )
-            if not response['UserConfirmed']:
-                self.cognito.admin_confirm_sign_up(
-                    UserPoolId=self.user_pool_id,
-                    Username=body['email']
-                )
-            return {'statusCode': 200, 'body': json.dumps({'message': 'Sign-up successful'})}
+            _LOG.info("Sign_up call succeeded. Now confirming sign_up in admin mode.")
+            self.cognito.admin_confirm_sign_up(
+                UserPoolId=self.user_pool_id,
+                Username=email
+            )
         except Exception as e:
-            return {'statusCode': 400, 'body': json.dumps({'message': 'Bad request', 'error': str(e)})}
+            _LOG.error(f"Sign up error for email '{email}': {str(e)}")
+            _LOG.exception(e)
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({
+                    'message': f'Cannot create user {email}. Error: {str(e)}'
+                })
+            }
+
+        _LOG.info("User %s was created and confirmed successfully.", email)
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({'message': f'User {email} was created.'})
+        }
+
     def signin(self, event):
         body = json.loads(event.get('body', '{}'))
         email = body.get('email')
         password = body.get('password')
+        _LOG.info("Preparing signin. Email: %s", email)
 
         if not email or not password:
-            return {'statusCode': 400, 'body': json.dumps({'message': 'Email and password are required'})}
-
-        try:
-            auth_params = {'USERNAME': email, 'PASSWORD': password}
-            response = self.cognito.admin_initiate_auth(
-                UserPoolId=self.user_pool_id,
-                ClientId=self.client_id,
-                AuthFlow='ADMIN_NO_SRP_AUTH',
-                AuthParameters=auth_params
-            )
-
-            if response.get('ChallengeName') == 'NEW_PASSWORD_REQUIRED':
-                return {'statusCode': 400, 'body': json.dumps({'message': 'New password required'})}
-
-            auth_result = response.get('AuthenticationResult', {})
-            access_token = auth_result.get('AccessToken')
-            id_token = auth_result.get('IdToken')
-            refresh_token = auth_result.get('RefreshToken')
-
-            if not id_token:
-                return {'statusCode': 500, 'body': json.dumps({'message': 'Authentication successful, but no ID token received'})}
-
+            _LOG.error("Signin failed. Missing email or password.")
             return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'accessToken': access_token,
-                    'idToken': id_token,
-                    'refreshToken': refresh_token
-                }),
-                "isBase64Encoded": False
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({'message': 'Missing email or password in signin.'})
             }
 
+        try:
+            _LOG.info("Attempting admin_initiate_auth for email: %s", email)
+            auth_result = self.cognito.admin_initiate_auth(
+                UserPoolId=self.user_pool_id,
+                ClientId=self.client_id,
+                AuthFlow='ADMIN_USER_PASSWORD_AUTH',
+                AuthParameters={
+                    'USERNAME': email,
+                    'PASSWORD': password
+                }
+            )
+
+            _LOG.info("admin_initiate_auth response: %s", auth_result)
+
+            if auth_result and 'AuthenticationResult' in auth_result:
+                id_token = auth_result['AuthenticationResult'].get('IdToken')
+                _LOG.info("Signin success for user: %s", email)
+                return {
+                    "statusCode": 200,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": json.dumps({"accessToken": id_token})
+                }
+            else:
+                _LOG.error("Signin failed. AuthenticationResult missing or invalid.")
+                return {
+                    "statusCode": 400,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": json.dumps({'message': 'Unable to authenticate user.'})
+                }
         except self.cognito.exceptions.NotAuthorizedException:
-            return {'statusCode': 401, 'body': json.dumps({'message': 'Incorrect email or password'})}
-
+            return {
+                "statusCode": 401,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({'message': 'Incorrect email or password'})
+            }
         except self.cognito.exceptions.UserNotFoundException:
-            return {'statusCode': 404, 'body': json.dumps({'message': 'User not found'})}
-
+            return {
+                "statusCode": 404,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({'message': 'User not found'})
+            }
         except Exception as e:
-            _LOG.error(f'Error in signin: {str(e)}')
-            return {'statusCode': 500, 'body': json.dumps({'message': 'Internal server error'})}
+            _LOG.error(f"Sign in error for email '{email}': {str(e)}")
+            _LOG.exception(e)
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({'message': 'Invalid login.'})
+            }
 
     def get_tables(self, event):
         try:
