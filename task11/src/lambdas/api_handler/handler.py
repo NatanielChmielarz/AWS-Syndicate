@@ -114,8 +114,9 @@ class ApiHandler(AbstractLambda):
         except Exception as e:
             return self._json_response(400, {"message": "Bad request", "error": str(e)})
 
-    def get_table_by_id(self, table_id):
+    def get_table_by_id(self, event):
         try:
+            table_id = int(event['path'].split('/')[-1])
             response = self.tables_table.get_item(Key={"id": int(table_id)})
             if "Item" in response:
                 return self._json_response(200, {"body": response["Item"]})
@@ -125,54 +126,38 @@ class ApiHandler(AbstractLambda):
 
     def create_reservation(self, event):
         try:
-            body = json.loads(event["body"])
-            _LOG.info(f"Received reservation request: {body}")
-            required_fields = ["tableNumber", "date", "slotTimeStart", "slotTimeEnd"]
-            if not all(field in body for field in required_fields):
-                return self._json_response(400, {"message": "Missing required fields"})
+            body = json.loads(event['body'])
 
-            table_number = body["tableNumber"]
-            date = body["date"]
+            required_fields = ['tableNumber', 'date', 'slotTimeStart', 'slotTimeEnd']
+            if not all(field in body for field in required_fields):
+                return self._json_response(400, {'message': 'Missing required fields'})
+
+            table_number = body['tableNumber']
+            date = body['date']
             slot_start = body["slotTimeStart"]
             slot_end = body["slotTimeEnd"]
 
-            tables_response = self.tables_table.scan()
-            table_numbers = [table["number"] for table in tables_response["Items"]]
+            tables = self.tables_table.scan()['Items']
+            if table_number not in [table["number"] for table in tables]:
+                return self._json_response(400, {'message': 'Table does not exist'})
 
-            if table_number not in table_numbers:
-                return self._json_response(400, {"message": "Table does not exist"})
-
-            proposed_start = datetime.strptime(slot_start, "%H:%M").time()
-            proposed_end = datetime.strptime(slot_end, "%H:%M").time()
-
-            reservations_response = self.reservations_table.scan(
+            reservations = self.reservations_table.scan(
                 FilterExpression="#tn = :table_number AND #d = :date",
                 ExpressionAttributeNames={"#tn": "tableNumber", "#d": "date"},
-                ExpressionAttributeValues={
-                    ":table_number": table_number,
-                    ":date": date,
-                },
-            )
+                ExpressionAttributeValues={":table_number": table_number, ":date": date}
+            )['Items']
 
-            for res in reservations_response.get("Items", []):
-                existing_start = datetime.strptime(res["slotTimeStart"], "%H:%M").time()
-                existing_end = datetime.strptime(res["slotTimeEnd"], "%H:%M").time()
-
-                if proposed_start < existing_end and proposed_end > existing_start:
-                    return self._json_response(
-                        400, {"message": "Time conflict: Table is already reserved."}
-                    )
+            for res in reservations:
+                if slot_start < res["slotTimeEnd"] and slot_end > res["slotTimeStart"]:
+                    return self._json_response(400, {'message': 'Time conflict: Table is already reserved.'})
 
             reservation_id = str(uuid.uuid4())
             self.reservations_table.put_item(Item={"id": reservation_id, **body})
 
-            _LOG.info(f"Reservation created successfully: {reservation_id}")
-
-            return self._json_response(200, {"reservationId": reservation_id})
+            return self._json_response(200, {'reservationId': reservation_id})
 
         except Exception as e:
-            _LOG.error(f"Error while creating reservation: {str(e)}")
-            return self._json_response(400, {"message": "Bad request", "error": str(e)})
+            return self._json_response(400, {'message': 'Bad request', 'error': str(e)})
 
     def get_reservations(self, event):
         try:
@@ -196,11 +181,6 @@ class ApiHandler(AbstractLambda):
             ("GET", "/reservations"): self.get_reservations,
         }
         route_key = (event["httpMethod"], event.get("resource"))
-        if route_key == ("GET", "/tables/{tableId}"):
-            table_id = event.get("pathParameters", {}).get("tableId")
-            if not table_id:
-                return self._json_response(400, {"message": "Missing tableId"})
-            return self.get_table_by_id(event, table_id)
         handler = routes.get(
             route_key, lambda _: self._json_response(400, {"message": "Invalid route"})
         )
