@@ -1,12 +1,12 @@
 {
   "openapi": "3.0.1",
   "info": {
-    "title": "task11_api",
+    "title": "task12_api",
     "version": "2024-07-22T17:43:48Z"
   },
   "servers": [
     {
-      "url": "https://qkc8ggvc5k.execute-api.eu-central-1.amazonaws.com/{basePath}",
+      "url": "https://rj1y8t3al8.execute-api.eu-west-1.amazonaws.com/{basePath}",
       "variables": {
         "basePath": {
           "default": "api"
