@@ -583,5 +583,17 @@
     "run_type": "stm",
     "type": "user",
     "user_id": "9841b66c"
-  }
+  },
+  "securitySchemes": {  
+    "authorizer": {  
+    "type": "apiKey",  
+    "name": "Authorization",  
+    "in": "header",  
+    "x-amazon-apigateway-authtype": "cognito_user_pools",  
+    "x-amazon-apigateway-authorizer": {  
+        "x-syndicate-cognito-userpool-names": ["{booking_userpool}"],
+    "type": "cognito_user_pools"  
+    }  
+  }  
+}  
 }
