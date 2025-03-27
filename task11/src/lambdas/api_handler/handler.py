@@ -117,9 +117,9 @@ class ApiHandler(AbstractLambda):
     def get_table_by_id(self, event):
         try:
             table_id = int(event['path'].split('/')[-1])
-            response = self.tables_table.get_item(Key={"id": int(table_id)})
+            response = self.tables_table.get_item(Key={"id": table_id})
             if "Item" in response:
-                return self._json_response(200, {"body": response["Item"]})
+                return self._json_response(200, response["Item"])
             return self._json_response(404, {"message": "Table not found"})
         except Exception as e:
             return self._json_response(400, {"message": "Bad request", "error": str(e)})
